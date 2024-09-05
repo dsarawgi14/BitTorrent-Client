@@ -97,7 +97,7 @@ std::vector<Peer*> PeerRetriever::retrievePeers(unsigned long bytesDownloaded)
  */
 std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
     LOG_F(INFO, "Decoding tracker response...");
-    std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(response);
+    std::shared_ptr<bencoding::BItem* decodedResponse = bencoding::decode(response);
 
     std::shared_ptr<bencoding::BDictionary> responseDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedResponse);
