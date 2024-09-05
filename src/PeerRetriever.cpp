@@ -97,11 +97,11 @@ std::vector<Peer*> PeerRetriever::retrievePeers(unsigned long bytesDownloaded)
  */
 std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
     LOG_F(INFO, "Decoding tracker response...");
-    std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(response);
+    bencoding::BItem* decodedResponse = bencoding::decode(response);
 
-    std::shared_ptr<bencoding::BDictionary> responseDict =
+    bencoding::BDictionary* responseDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedResponse);
-    std::shared_ptr<bencoding::BItem> peersValue = responseDict->getValue("peers");
+    bencoding::BItem* peersValue = responseDict->getValue("peers");
     if (!peersValue)
         throw std::runtime_error("Response returned by the tracker is not in the correct format. ['peers' not found]");
 
@@ -138,21 +138,21 @@ std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
     // Handles the second case where peer information is stored in a list
     else if (typeid(*peersValue) == typeid(bencoding::BList))
     {
-        std::shared_ptr<bencoding::BList> peerList = std::dynamic_pointer_cast<bencoding::BList>(peersValue);
+        bencoding::BList* peerList = std::dynamic_pointer_cast<bencoding::BList>(peersValue);
         for (auto &item : *peerList)
         {
             // Casts each item to a dictionary
-            std::shared_ptr<bencoding::BDictionary> peerDict = std::dynamic_pointer_cast<bencoding::BDictionary>(item);
+            bencoding::BDictionary* peerDict = std::dynamic_pointer_cast<bencoding::BDictionary>(item);
 
             // Gets peer ip from the dictionary
-            std::shared_ptr<bencoding::BItem> tempPeerIp = peerDict->getValue("ip");
+            bencoding::BItem* tempPeerIp = peerDict->getValue("ip");
 
             if (!tempPeerIp)
                 throw std::runtime_error("Received malformed 'peers' from tracker. [Item does not contain key 'ip']");
 
             std::string peerIp = std::dynamic_pointer_cast<bencoding::BString>(tempPeerIp)->value();
             // Gets peer port from the dictionary
-            std::shared_ptr<bencoding::BItem> tempPeerPort = peerDict->getValue("port");
+            bencoding::BItem* tempPeerPort = peerDict->getValue("port");
             if (!tempPeerPort)
                 throw std::runtime_error("Received malformed 'peers' from tracker. [Item does not contain key 'port']");
             int peerPort = (int) std::dynamic_pointer_cast<bencoding::BInteger>(tempPeerPort)->value();
