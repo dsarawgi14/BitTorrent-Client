@@ -87,4 +87,86 @@ std::vector<Peer*> PeerRetriever::retrievePeers(unsigned long bytesDownloaded)
     return std::vector<Peer*>();
 }
 
+/**
+ * Decodes the response string sent by the tracker. If the string can successfully decoded,
+ * returns a list of pointers to Peer structs. Note that this functions handles two distinct representations,
+ * one of them has the peers denoted as a long binary blob (compact), the other represents peers in a list
+ * with all the information already in place. The former can be seen in the response of
+ * the kali-linux tracker, whereas the latter can be found in the tracker response of the
+ * other two files.
+ */
+std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
+    LOG_F(INFO, "Decoding tracker response...");
+    std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(response);
+
+    std::shared_ptr<bencoding::BDictionary> responseDict =
+            std::dynamic_pointer_cast<bencoding::BDictionary>(decodedResponse);
+    std::shared_ptr<bencoding::BItem> peersValue = responseDict->getValue("peers");
+    if (!peersValue)
+        throw std::runtime_error("Response returned by the tracker is not in the correct format. ['peers' not found]");
+
+    std::vector<Peer*> peers;
+
+    // Handles the first case where peer information is sent in a binary blob (compact)
+    if (typeid(*peersValue) == typeid(bencoding::BString))
+    {
+        // Every 6 bytes represent a single peer with the first 4 bytes being the IP
+        // and the last 2 bytes being the port number.
+        const int peerInfoSize = 6;
+        std::string peersString = std::dynamic_pointer_cast<bencoding::BString>(peersValue)->value();
+
+        if (peersString.length() % peerInfoSize != 0)
+            throw std::runtime_error(
+                    "Received malformed 'peers' from tracker. ['peers' length needs to be divisible by 6]");
+
+        const int peerNum = peersString.length() / peerInfoSize;
+        for (int i = 0; i < peerNum; i++)
+        {
+            int offset = i * peerInfoSize;
+            std::stringstream peerIp;
+            peerIp << std::to_string((uint8_t) peersString[offset]) << ".";
+            peerIp << std::to_string((uint8_t) peersString[offset + 1]) << ".";
+            peerIp << std::to_string((uint8_t) peersString[offset + 2]) << ".";
+            peerIp << std::to_string((uint8_t) peersString[offset + 3]);
+            int peerPort = bytesToInt(peersString.substr(offset + 4, 2));
+            // std::cout << "IP: " << peerIp.str() << std::endl;
+            // std::cout << "Port: " << std::to_string(peerPort) << std::endl;
+            Peer* newPeer = new Peer { peerIp.str(), peerPort };
+            peers.push_back(newPeer);
+        }
+    }
+    // Handles the second case where peer information is stored in a list
+    else if (typeid(*peersValue) == typeid(bencoding::BList))
+    {
+        std::shared_ptr<bencoding::BList> peerList = std::dynamic_pointer_cast<bencoding::BList>(peersValue);
+        for (auto &item : *peerList)
+        {
+            // Casts each item to a dictionary
+            std::shared_ptr<bencoding::BDictionary> peerDict = std::dynamic_pointer_cast<bencoding::BDictionary>(item);
+
+            // Gets peer ip from the dictionary
+            std::shared_ptr<bencoding::BItem> tempPeerIp = peerDict->getValue("ip");
+
+            if (!tempPeerIp)
+                throw std::runtime_error("Received malformed 'peers' from tracker. [Item does not contain key 'ip']");
+
+            std::string peerIp = std::dynamic_pointer_cast<bencoding::BString>(tempPeerIp)->value();
+            // Gets peer port from the dictionary
+            std::shared_ptr<bencoding::BItem> tempPeerPort = peerDict->getValue("port");
+            if (!tempPeerPort)
+                throw std::runtime_error("Received malformed 'peers' from tracker. [Item does not contain key 'port']");
+            int peerPort = (int) std::dynamic_pointer_cast<bencoding::BInteger>(tempPeerPort)->value();
+            Peer* newPeer = new Peer { peerIp, peerPort };
+            peers.push_back(newPeer);
+        }
+    }
+    else
+    {
+        throw std::runtime_error(
+                "Response returned by the tracker is not in the correct format. ['peers' has the wrong type]");
+    }
+    LOG_F(INFO, "Decode tracker response: SUCCESS");
+    LOG_F(INFO, "Number of peers discovered: %zu", peers.size());
+    return peers;
+}
 
