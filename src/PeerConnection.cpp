@@ -120,3 +120,46 @@ void PeerConnection::stop()
     terminated = true;
 }
 
+
+/**
+ * Establishes a TCP connection with the peer and sent it our initial BitTorrent handshake message.
+ * Waits for its reply, and compares the info hash contained in its response message with
+ * the info hash we calculated from the Torrent file. If they do not match, close the connection.
+ */
+void PeerConnection::performHandshake()
+{
+    // Connects to the peer
+    LOG_F(INFO, "Connecting to peer [%s]...", peer->ip.c_str());
+    try
+    {
+        sock = createConnection(peer->ip, peer->port);
+    }
+    catch (std::runtime_error &e)
+    {
+        throw std::runtime_error("Cannot connect to peer [" + peer->ip + "]");
+    }
+    LOG_F(INFO, "Establish TCP connection with peer at socket %d: SUCCESS", sock);
+
+    // Send the handshake message to the peer
+    LOG_F(INFO, "Sending handshake message to [%s]...", peer->ip.c_str());
+    std::string handshakeMessage = createHandshakeMessage();
+    sendData(sock, handshakeMessage);
+    LOG_F(INFO, "Send handshake message: SUCCESS");
+
+    // Receive the reply from the peer
+    LOG_F(INFO, "Receiving handshake reply from peer [%s]...", peer->ip.c_str());
+    std::string reply = receiveData(sock, handshakeMessage.length());
+    if (reply.empty())
+        throw std::runtime_error("Receive handshake from peer: FAILED [No response from peer]");
+    peerId = reply.substr(PEER_ID_STARTING_POS, HASH_LEN);
+    LOG_F(INFO, "Receive handshake reply from peer: SUCCESS");
+
+    // Compare the info hash from the peer's reply message with the info hash we sent.
+    // If the two values are not the same, close the connection and raise an exception.
+    std::string receivedInfoHash = reply.substr(INFO_HASH_STARTING_POS, HASH_LEN);
+    if ((receivedInfoHash == infoHash) != 0)
+        throw std::runtime_error("Perform handshake with peer " + peer->ip +
+                                 ": FAILED [Received mismatching info hash]");
+    LOG_F(INFO, "Hash comparison: SUCCESS");
+}
+
